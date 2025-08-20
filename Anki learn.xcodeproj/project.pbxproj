@@ -35,16 +35,6 @@
 			path = "Anki learn";
 			sourceTree = "<group>";
 		};
-		80D9BBDC2E563D3B00CE9D2A /* Anki learnTests */ = {
-			isa = PBXFileSystemSynchronizedRootGroup;
-			path = "Anki learnTests";
-			sourceTree = "<group>";
-		};
-		80D9BBE62E563D3B00CE9D2A /* Anki learnUITests */ = {
-			isa = PBXFileSystemSynchronizedRootGroup;
-			path = "Anki learnUITests";
-			sourceTree = "<group>";
-		};
 /* End PBXFileSystemSynchronizedRootGroup section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -76,8 +66,6 @@
 			isa = PBXGroup;
 			children = (
 				80D9BBCA2E563D3900CE9D2A /* Anki learn */,
-				80D9BBDC2E563D3B00CE9D2A /* Anki learnTests */,
-				80D9BBE62E563D3B00CE9D2A /* Anki learnUITests */,
 				80D9BBC92E563D3900CE9D2A /* Products */,
 			);
 			sourceTree = "<group>";
@@ -130,9 +118,6 @@
 			dependencies = (
 				80D9BBDB2E563D3B00CE9D2A /* PBXTargetDependency */,
 			);
-			fileSystemSynchronizedGroups = (
-				80D9BBDC2E563D3B00CE9D2A /* Anki learnTests */,
-			);
 			name = "Anki learnTests";
 			packageProductDependencies = (
 			);
@@ -152,9 +137,6 @@
 			);
 			dependencies = (
 				80D9BBE52E563D3B00CE9D2A /* PBXTargetDependency */,
-			);
-			fileSystemSynchronizedGroups = (
-				80D9BBE62E563D3B00CE9D2A /* Anki learnUITests */,
 			);
 			name = "Anki learnUITests";
 			packageProductDependencies = (
