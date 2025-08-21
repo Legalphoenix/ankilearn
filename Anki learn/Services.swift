@@ -120,13 +120,24 @@ enum AnkiProfile {
     }
 
     static func availableProfiles() -> [String] {
-        let dir = profilesDir()
+        let fm = FileManager.default
+        let baseDir = profilesDir()
         do {
-            let urls = try FileManager.default.contentsOfDirectory(at: dir, includingPropertiesForKeys: [.isDirectoryKey], options: .skipsHiddenFiles)
-            let profileDirs = try urls.filter { url in
-                let resourceValues = try url.resourceValues(forKeys: [.isDirectoryKey])
-                return resourceValues.isDirectory == true && url.lastPathComponent != "addons21"
+            let allItemURLs = try fm.contentsOfDirectory(at: baseDir, includingPropertiesForKeys: [.isDirectoryKey], options: [])
+
+            let profileDirs = allItemURLs.filter { itemURL in
+                // Must be a directory
+                guard (try? itemURL.resourceValues(forKeys: [.isDirectoryKey]))?.isDirectory == true else {
+                    return false
+                }
+                // Must not be addons
+                if itemURL.lastPathComponent == "addons21" { return false }
+
+                // Must contain a collection file
+                let collectionURL = itemURL.appendingPathComponent("collection.anki2")
+                return fm.fileExists(atPath: collectionURL.path)
             }
+
             return profileDirs.map { $0.lastPathComponent }
         } catch {
             return []
