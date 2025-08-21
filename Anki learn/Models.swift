@@ -1,4 +1,4 @@
-import Foundation
+import SwiftUI
 
 struct Card: Identifiable, Hashable {
     let id: UUID
