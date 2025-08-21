@@ -47,12 +47,17 @@ final class AppState: ObservableObject {
     // export location
     @Published var exportFolderURL: URL?
 
+    // anki
+    @AppStorage("ankiProfile") var selectedProfile: String = ""
+    @AppStorage("copyToAnki") var copyToAnki: Bool = true
+
     // building
     @Published var isBuilding = false
     @Published var progress = BuildProgress()
 
     // sheets
     @Published var showApiKeySheet = false
+    @Published var showSettingsSheet = false
 
     // per-card overrides (optional future)
     // var overrides: [UUID: String] = [:]

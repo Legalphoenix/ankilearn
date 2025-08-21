@@ -110,6 +110,44 @@ enum AnkiExporter {
     }
 }
 
+// MARK: - Anki Profile & Media Management
+
+enum AnkiProfile {
+    static func profilesDir() -> URL {
+        FileManager.default.homeDirectoryForCurrentUser
+            .appendingPathComponent("Library/Application Support/Anki2")
+    }
+
+    static func availableProfiles() -> [String] {
+        let dir = profilesDir()
+        do {
+            let items = try FileManager.default.contentsOfDirectory(atPath: dir.path)
+            return items.filter { $0 != "addons21" && !$0.hasPrefix(".") }
+        } catch {
+            return []
+        }
+    }
+
+    static func collectionMedia(for profile: String) -> URL {
+        profilesDir().appendingPathComponent(profile).appendingPathComponent("collection.media")
+    }
+}
+
+enum MediaCopy {
+    static func copyAll(from srcDir: URL, to dstDir: URL) throws {
+        let fm = FileManager.default
+        try fm.createDirectory(at: dstDir, withIntermediateDirectories: true)
+        let items = try fm.contentsOfDirectory(at: srcDir, includingPropertiesForKeys: nil)
+        for item in items {
+            let dstURL = dstDir.appendingPathComponent(item.lastPathComponent)
+            if fm.fileExists(atPath: dstURL.path) {
+                try fm.removeItem(at: dstURL)
+            }
+            try fm.copyItem(at: item, to: dstURL)
+        }
+    }
+}
+
 // MARK: - Prompt Assembly
 
 enum PromptBuilder {

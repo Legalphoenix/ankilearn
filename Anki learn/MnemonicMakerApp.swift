@@ -15,6 +15,10 @@ struct MnemonicMakerApp: App {
                     appState.showApiKeySheet = true
                 }
                 .keyboardShortcut(",", modifiers: .command)
+
+                Button("Settings…") {
+                    appState.showSettingsSheet = true
+                }
             }
         }
     }

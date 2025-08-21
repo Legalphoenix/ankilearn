@@ -12,6 +12,9 @@ struct ContentView: View {
         .sheet(isPresented: $app.showApiKeySheet) {
             APIKeySheet()
         }
+        .sheet(isPresented: $app.showSettingsSheet) {
+            SettingsView()
+        }
     }
 }
 
