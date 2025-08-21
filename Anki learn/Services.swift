@@ -122,8 +122,12 @@ enum AnkiProfile {
     static func availableProfiles() -> [String] {
         let dir = profilesDir()
         do {
-            let items = try FileManager.default.contentsOfDirectory(atPath: dir.path)
-            return items.filter { $0 != "addons21" && !$0.hasPrefix(".") }
+            let urls = try FileManager.default.contentsOfDirectory(at: dir, includingPropertiesForKeys: [.isDirectoryKey], options: .skipsHiddenFiles)
+            let profileDirs = try urls.filter { url in
+                let resourceValues = try url.resourceValues(forKeys: [.isDirectoryKey])
+                return resourceValues.isDirectory == true && url.lastPathComponent != "addons21"
+            }
+            return profileDirs.map { $0.lastPathComponent }
         } catch {
             return []
         }

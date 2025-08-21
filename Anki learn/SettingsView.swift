@@ -2,6 +2,7 @@ import SwiftUI
 
 struct SettingsView: View {
     @EnvironmentObject var app: AppState
+    @Environment(\.dismiss) private var dismiss
     @State private var ankiProfiles: [String] = []
 
     var body: some View {
@@ -37,6 +38,14 @@ struct SettingsView: View {
             }
 
             Spacer()
+
+            HStack {
+                Spacer()
+                Button("Done") {
+                    dismiss()
+                }
+                .keyboardShortcut(.return, modifiers: [])
+            }
         }
         .padding()
         .frame(minWidth: 400, minHeight: 250)
