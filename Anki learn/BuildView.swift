@@ -107,80 +107,102 @@ struct BuildView: View {
             let mediaDir = folder.appendingPathComponent("media", isDirectory: true)
             do { try fm.createDirectory(at: mediaDir, withIntermediateDirectories: true) } catch {}
 
+            // Result type for concurrent tasks
+            struct CardResult {
+                let cardId: UUID
+                let cardIndex: Int
+                let imageResult: Result<String, Error>
+                let audioResult: Result<String, Error>
+            }
+
             var imageNames: [UUID: String] = [:]
             var audioNames: [UUID: String] = [:]
 
-            for card in app.cards {
+            let chunkSize = 10 // Process 10 cards concurrently
+            let cardChunks = app.cards.chunked(into: chunkSize)
+
+            for (chunkIndex, chunk) in cardChunks.enumerated() {
                 if Task.isCancelled { break }
 
-                let idx = String(format: "%04d", card.index)
-                let imgName = "\(runId)_\(idx)_img.jpg"
-                let sndName = "\(runId)_\(idx)_audio.\(app.audioFormat.rawValue)"
-
-                // --- IMAGE ---
-                do {
-                    let prompt = PromptBuilder.scenePrompt(globalStyle: app.imageGlobalStyle,
-                                                          phrase: card.phrase,
-                                                          translation: card.translation)
-                    app.progress.currentStatus = "Image \(card.index)/\(app.cards.count)"
-                    let imgData = try await client.generateImage(prompt: prompt,
-                                                                 size: app.imageSize,
-                                                                 quality: app.imageQuality,
-                                                                 format: "jpeg")
-                    let imgURL = mediaDir.appendingPathComponent(imgName)
-                    try imgData.write(to: imgURL)
-                    imageNames[card.id] = imgName
-                    await MainActor.run {
-                        log.append("✓ Image \(card.index): \(imgName)")
-                        app.progress.completed += 1
-                    }
-                } catch {
-                    await MainActor.run {
-                        log.append("✗ Image \(card.index) failed: \(error.localizedDescription)")
-                        app.progress.completed += 1
-                        app.progress.failed += 1
-                    }
+                await MainActor.run {
+                    app.progress.currentStatus = "Processing batch \(chunkIndex + 1)/\(cardChunks.count)..."
                 }
 
-                if Task.isCancelled { break }
+                await withTaskGroup(of: CardResult.self) { group in
+                    for card in chunk {
+                        group.addTask {
+                            // --- IMAGE ---
+                            let imgName = "\(runId)_\(String(format: "%04d", card.index))_img.jpg"
+                            let imageTaskResult: Result<String, Error> = await {
+                                do {
+                                    let prompt = PromptBuilder.scenePrompt(globalStyle: app.imageGlobalStyle, phrase: card.phrase, translation: card.translation)
+                                    let imgData = try await retry(times: 3, delay: 2.0) {
+                                        try await client.generateImage(prompt: prompt, size: app.imageSize, quality: app.imageQuality, format: "jpeg")
+                                    }
+                                    let imgURL = mediaDir.appendingPathComponent(imgName)
+                                    try imgData.write(to: imgURL)
+                                    return .success(imgName)
+                                } catch {
+                                    return .failure(error)
+                                }
+                            }()
 
-                // --- AUDIO (phrase only by default) ---
-                do {
-                    let phrase = card.phrase
-                    app.progress.currentStatus = "Audio \(card.index)/\(app.cards.count)"
-                    let audioData = try await client.synthesize(input: phrase,
-                                                                voice: app.ttsVoice,
-                                                                format: app.audioFormat.rawValue,
-                                                                model: "gpt-4o-mini-tts")
-                    let audioURL = mediaDir.appendingPathComponent(sndName)
-                    try audioData.write(to: audioURL)
-                    audioNames[card.id] = sndName
-                    await MainActor.run {
-                        log.append("✓ Audio \(card.index): \(sndName)")
-                        app.progress.completed += 1
+                            // --- AUDIO ---
+                            let sndName = "\(runId)_\(String(format: "%04d", card.index))_audio.\(app.audioFormat.rawValue)"
+                            let audioTaskResult: Result<String, Error> = await {
+                                do {
+                                    let audioData = try await retry(times: 3, delay: 2.0) {
+                                        try await client.synthesize(input: card.phrase, voice: app.ttsVoice, format: app.audioFormat.rawValue, model: "gpt-4o-mini-tts")
+                                    }
+                                    let audioURL = mediaDir.appendingPathComponent(sndName)
+                                    try audioData.write(to: audioURL)
+                                    return .success(sndName)
+                                } catch {
+                                    return .failure(error)
+                                }
+                            }()
+
+                            return CardResult(cardId: card.id, cardIndex: card.index, imageResult: imageTaskResult, audioResult: audioTaskResult)
+                        }
                     }
-                } catch {
-                    await MainActor.run {
-                        log.append("✗ Audio \(card.index) failed: \(error.localizedDescription)")
+
+                    // Process results as they complete
+                    for await result in group {
+                        switch result.imageResult {
+                        case .success(let filename):
+                            imageNames[result.cardId] = filename
+                            log.append("✓ Image \(result.cardIndex): \(filename)")
+                        case .failure(let error):
+                            log.append("✗ Image \(result.cardIndex) failed: \(error.localizedDescription)")
+                            app.progress.failed += 1
+                        }
                         app.progress.completed += 1
-                        app.progress.failed += 1
+
+                        switch result.audioResult {
+                        case .success(let filename):
+                            audioNames[result.cardId] = filename
+                            log.append("✓ Audio \(result.cardIndex): \(filename)")
+                        case .failure(let error):
+                            log.append("✗ Audio \(result.cardIndex) failed: \(error.localizedDescription)")
+                            app.progress.failed += 1
+                        }
+                        app.progress.completed += 1
                     }
                 }
             }
 
             // write TSV at the end
-            do {
-                try AnkiExporter.writeExport(cards: app.cards,
-                                             imageNames: imageNames,
-                                             audioNames: audioNames,
-                                             to: folder)
-                await MainActor.run { log.append("✓ Wrote deck.tsv") }
-            } catch {
-                await MainActor.run { log.append("✗ Writing deck.tsv failed: \(error.localizedDescription)") }
+            if !Task.isCancelled {
+                do {
+                    try AnkiExporter.writeExport(cards: app.cards, imageNames: imageNames, audioNames: audioNames, to: folder)
+                    await MainActor.run { log.append("✓ Wrote deck.tsv") }
+                } catch {
+                    await MainActor.run { log.append("✗ Writing deck.tsv failed: \(error.localizedDescription)") }
+                }
             }
 
             // copy to anki
-            if app.copyToAnki, !app.selectedProfile.isEmpty {
+            if !Task.isCancelled && app.copyToAnki && !app.selectedProfile.isEmpty {
                 do {
                     let ankiMediaDir = AnkiProfile.collectionMedia(for: app.selectedProfile)
                     try MediaCopy.copyAll(from: mediaDir, to: ankiMediaDir)
@@ -191,7 +213,7 @@ struct BuildView: View {
             }
 
             await MainActor.run {
-                app.progress.currentStatus = "Done."
+                app.progress.currentStatus = Task.isCancelled ? "Cancelled." : "Done."
                 app.isBuilding = false
             }
         }
