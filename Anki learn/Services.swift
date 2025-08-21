@@ -102,9 +102,13 @@ enum AnkiExporter {
 
         var rows: [String] = []
         for c in cards {
-            let img = imageNames[c.id] ?? ""
-            let aud = audioNames[c.id] ?? ""
-            rows.append("\(c.phrase)\t\(c.translation)\t\(img)\t\(aud)")
+            let imgName = imageNames[c.id] ?? ""
+            let audName = audioNames[c.id] ?? ""
+
+            let imgTag = imgName.isEmpty ? "" : "<img src=\"\(imgName)\">"
+            let sndTag = audName.isEmpty ? "" : "[sound:\(audName)]"
+
+            rows.append("\(c.phrase)\t\(c.translation)\t\(imgTag)\t\(sndTag)")
         }
         let tsv = rows.joined(separator: "\n")
         try tsv.write(to: folder.appendingPathComponent("deck.tsv"), atomically: true, encoding: .utf8)
