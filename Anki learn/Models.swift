@@ -5,10 +5,6 @@ struct Card: Identifiable, Hashable {
     var index: Int
     var phrase: String
     var translation: String
-
-    // filenames produced during build
-    var imageFilename: String { String(format: "%04d_phrase-img.jpg", index) }
-    var audioFilename: String { String(format: "%04d_phrase.mp3", index) }
 }
 
 enum AudioFormat: String, CaseIterable, Identifiable {

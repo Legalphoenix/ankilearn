@@ -93,17 +93,18 @@ enum AnkiExporter {
     /// Writes folder:
     ///   deck.tsv
     ///   media/{image,audio files}
-    static func writeExport(cards: [Card], to folder: URL) throws {
+    static func writeExport(cards: [Card],
+                            imageNames: [UUID:String],
+                            audioNames: [UUID:String],
+                            to folder: URL) throws {
         let media = folder.appendingPathComponent("media", isDirectory: true)
         try FileManager.default.createDirectory(at: media, withIntermediateDirectories: true)
 
-        // TSV (Front | Back | Image | Audio)
         var rows: [String] = []
-        rows.reserveCapacity(cards.count)
         for c in cards {
-            let imgTag = "<img src=\"\(c.imageFilename)\">"
-            let sndTag = "[sound:\(c.audioFilename)]"
-            rows.append("\(c.phrase)\t\(c.translation)\t\(imgTag)\t\(sndTag)")
+            let img = imageNames[c.id] ?? ""
+            let aud = audioNames[c.id] ?? ""
+            rows.append("\(c.phrase)\t\(c.translation)\t\(img)\t\(aud)")
         }
         let tsv = rows.joined(separator: "\n")
         try tsv.write(to: folder.appendingPathComponent("deck.tsv"), atomically: true, encoding: .utf8)
@@ -155,7 +156,7 @@ enum PromptBuilder {
         // Phrase + meaning in-prompt so the model "knows" what to depict.
         """
         \(globalStyle)
-        Phrase: "\(phrase)" (used to mean: "\(translation)").
+        French idiom or phrase: "\(phrase)" (used to mean: "\(translation)").
         Create a memorable illustrative scene that makes this phrase easy to recall. \
         Keep a single clear focal point; no text or captions; no watermarks.
         """

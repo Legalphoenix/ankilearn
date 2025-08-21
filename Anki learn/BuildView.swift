@@ -4,6 +4,8 @@ struct BuildView: View {
     @EnvironmentObject var app: AppState
     @State private var log: [String] = []
     @State private var runningTask: Task<Void, Never>?
+    @State private var deckLabel: String = ""
+    @State private var runId: String = ""
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
@@ -19,6 +21,10 @@ struct BuildView: View {
                 }
                 Spacer()
             }
+
+            TextField("Deck Label (optional)", text: $deckLabel)
+                .textFieldStyle(RoundedBorderTextFieldStyle())
+                .frame(maxWidth: 250)
 
             HStack(spacing: 12) {
                 Button(app.isBuilding ? "Stop" : "Start Build") {
@@ -69,7 +75,22 @@ struct BuildView: View {
         }
     }
 
+    func makeRunId() -> String {
+        func slug(_ s: String) -> String {
+            let allowed = CharacterSet.alphanumerics.union(CharacterSet(charactersIn: "-_"))
+            return s.lowercased()
+                .replacingOccurrences(of: " ", with: "-")
+                .components(separatedBy: allowed.inverted).joined()
+                .trimmingCharacters(in: CharacterSet(charactersIn: "-_"))
+        }
+        let label = deckLabel.isEmpty ? "deck" : slug(deckLabel)
+        let df = DateFormatter()
+        df.dateFormat = "yyyy-MM-dd-HHmmss"
+        return "\(label)-\(df.string(from: Date()))"
+    }
+
     func startBuild() {
+        runId = makeRunId()
         guard let folder = app.exportFolderURL else { return }
         guard let apiKey = Keychain.loadAPIKey() else {
             NSApplication.shared.presentError(NSError(domain: "", code: -1, userInfo: [NSLocalizedDescriptionKey: "Set API key (⌘,) first."]))
@@ -83,18 +104,18 @@ struct BuildView: View {
         runningTask = Task {
             let client = OpenAIClient(cfg: .init(apiKey: apiKey))
             let fm = FileManager.default
-            let media = folder.appendingPathComponent("media", isDirectory: true)
-            do { try fm.createDirectory(at: media, withIntermediateDirectories: true) } catch {}
+            let mediaDir = folder.appendingPathComponent("media", isDirectory: true)
+            do { try fm.createDirectory(at: mediaDir, withIntermediateDirectories: true) } catch {}
 
-            // helper to write a file if missing
-            func writeIfAbsent(data: Data, to url: URL) throws {
-                if !fm.fileExists(atPath: url.path) {
-                    try data.write(to: url)
-                }
-            }
+            var imageNames: [UUID: String] = [:]
+            var audioNames: [UUID: String] = [:]
 
             for card in app.cards {
                 if Task.isCancelled { break }
+
+                let idx = String(format: "%04d", card.index)
+                let imgName = "\(runId)_\(idx)_img.jpg"
+                let sndName = "\(runId)_\(idx)_audio.\(app.audioFormat.rawValue)"
 
                 // --- IMAGE ---
                 do {
@@ -106,10 +127,11 @@ struct BuildView: View {
                                                                  size: app.imageSize,
                                                                  quality: app.imageQuality,
                                                                  format: "jpeg")
-                    let imgURL = media.appendingPathComponent(card.imageFilename)
-                    try writeIfAbsent(data: imgData, to: imgURL)
+                    let imgURL = mediaDir.appendingPathComponent(imgName)
+                    try imgData.write(to: imgURL)
+                    imageNames[card.id] = imgName
                     await MainActor.run {
-                        log.append("✓ Image \(card.index): \(card.imageFilename)")
+                        log.append("✓ Image \(card.index): \(imgName)")
                         app.progress.completed += 1
                     }
                 } catch {
@@ -130,10 +152,11 @@ struct BuildView: View {
                                                                 voice: app.ttsVoice,
                                                                 format: app.audioFormat.rawValue,
                                                                 model: "gpt-4o-mini-tts")
-                    let audioURL = media.appendingPathComponent(card.audioFilename)
-                    try writeIfAbsent(data: audioData, to: audioURL)
+                    let audioURL = mediaDir.appendingPathComponent(sndName)
+                    try audioData.write(to: audioURL)
+                    audioNames[card.id] = sndName
                     await MainActor.run {
-                        log.append("✓ Audio \(card.index): \(card.audioFilename)")
+                        log.append("✓ Audio \(card.index): \(sndName)")
                         app.progress.completed += 1
                     }
                 } catch {
@@ -147,10 +170,24 @@ struct BuildView: View {
 
             // write TSV at the end
             do {
-                try AnkiExporter.writeExport(cards: app.cards, to: folder)
+                try AnkiExporter.writeExport(cards: app.cards,
+                                             imageNames: imageNames,
+                                             audioNames: audioNames,
+                                             to: folder)
                 await MainActor.run { log.append("✓ Wrote deck.tsv") }
             } catch {
                 await MainActor.run { log.append("✗ Writing deck.tsv failed: \(error.localizedDescription)") }
+            }
+
+            // copy to anki
+            if app.copyToAnki, !app.selectedProfile.isEmpty {
+                do {
+                    let ankiMediaDir = AnkiProfile.collectionMedia(for: app.selectedProfile)
+                    try MediaCopy.copyAll(from: mediaDir, to: ankiMediaDir)
+                    await MainActor.run { log.append("✓ Copied media to Anki profile: \(app.selectedProfile)") }
+                } catch {
+                    await MainActor.run { log.append("✗ Copying to Anki failed: \(error.localizedDescription)") }
+                }
             }
 
             await MainActor.run {
