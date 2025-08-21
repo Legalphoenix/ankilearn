@@ -155,7 +155,7 @@ enum PromptBuilder {
         // Phrase + meaning in-prompt so the model "knows" what to depict.
         """
         \(globalStyle)
-        French idiom or phrase: "\(phrase)" (used to mean: "\(translation)").
+        Phrase: "\(phrase)" (used to mean: "\(translation)").
         Create a memorable illustrative scene that makes this phrase easy to recall. \
         Keep a single clear focal point; no text or captions; no watermarks.
         """
