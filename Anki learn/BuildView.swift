@@ -118,7 +118,7 @@ struct BuildView: View {
             var imageNames: [UUID: String] = [:]
             var audioNames: [UUID: String] = [:]
 
-            let chunkSize = 10 // Process 10 cards concurrently
+            let chunkSize = 25 // Process 25 cards concurrently
             let cardChunks = app.cards.chunked(into: chunkSize)
 
             for (chunkIndex, chunk) in cardChunks.enumerated() {
@@ -136,7 +136,7 @@ struct BuildView: View {
                             let imageTaskResult: Result<String, Error> = await {
                                 do {
                                     let prompt = PromptBuilder.scenePrompt(globalStyle: app.imageGlobalStyle, phrase: card.phrase, translation: card.translation)
-                                    let imgData = try await retry(times: 3, delay: 2.0) {
+                                    let imgData = try await retry(times: 10, delay: 2.0) {
                                         try await client.generateImage(prompt: prompt, size: app.imageSize, quality: app.imageQuality, format: "jpeg")
                                     }
                                     let imgURL = mediaDir.appendingPathComponent(imgName)
@@ -151,7 +151,7 @@ struct BuildView: View {
                             let sndName = "\(runId)_\(String(format: "%04d", card.index))_audio.\(app.audioFormat.rawValue)"
                             let audioTaskResult: Result<String, Error> = await {
                                 do {
-                                    let audioData = try await retry(times: 3, delay: 2.0) {
+                                    let audioData = try await retry(times: 10, delay: 2.0) {
                                         try await client.synthesize(input: card.phrase, voice: app.ttsVoice, format: app.audioFormat.rawValue, model: "gpt-4o-mini-tts", instructions: app.audioGlobalStyle)
                                     }
                                     let audioURL = mediaDir.appendingPathComponent(sndName)
