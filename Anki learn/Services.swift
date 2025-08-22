@@ -91,12 +91,14 @@ enum Parser {
 
 enum AnkiExporter {
     /// Writes folder:
-    ///   deck.tsv
+    ///   <runId>.tsv
     ///   media/{image,audio files}
     static func writeExport(cards: [Card],
-                            imageNames: [UUID:String],
-                            audioNames: [UUID:String],
-                            to folder: URL) throws {
+                            imageNames: [UUID: String],
+                            audioNames: [UUID: String],
+                            to folder: URL,
+                            runId: String) throws -> String
+    {
         let media = folder.appendingPathComponent("media", isDirectory: true)
         try FileManager.default.createDirectory(at: media, withIntermediateDirectories: true)
 
@@ -111,7 +113,9 @@ enum AnkiExporter {
             rows.append("\(c.phrase)\t\(c.translation)\t\(imgTag)\t\(sndTag)")
         }
         let tsv = rows.joined(separator: "\n")
-        try tsv.write(to: folder.appendingPathComponent("deck.tsv"), atomically: true, encoding: .utf8)
+        let tsvFilename = "\(runId).tsv"
+        try tsv.write(to: folder.appendingPathComponent(tsvFilename), atomically: true, encoding: .utf8)
+        return tsvFilename
     }
 }
 

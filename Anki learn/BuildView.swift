@@ -194,10 +194,10 @@ struct BuildView: View {
             // write TSV at the end
             if !Task.isCancelled {
                 do {
-                    try AnkiExporter.writeExport(cards: app.cards, imageNames: imageNames, audioNames: audioNames, to: folder)
-                    await MainActor.run { log.append("✓ Wrote deck.tsv") }
+                    let filename = try AnkiExporter.writeExport(cards: app.cards, imageNames: imageNames, audioNames: audioNames, to: folder, runId: runId)
+                    await MainActor.run { log.append("✓ Wrote \(filename)") }
                 } catch {
-                    await MainActor.run { log.append("✗ Writing deck.tsv failed: \(error.localizedDescription)") }
+                    await MainActor.run { log.append("✗ Writing deck TSV failed: \(error.localizedDescription)") }
                 }
             }
 
