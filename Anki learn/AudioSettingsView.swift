@@ -21,11 +21,22 @@ struct AudioSettingsView: View {
                 }
                 Toggle("Also synthesize translation (back)", isOn: $app.synthesizeBackToo)
                 Spacer()
+                TextField("Test text", text: $app.audioTestText)
+                    .textFieldStyle(RoundedBorderTextFieldStyle())
+                    .frame(maxWidth: 250)
                 Button("Test Voice") {
                     Task { await testVoice() }
                 }
             }
             .padding(.bottom, 8)
+
+            Text("Global instructions to change the tone and language of the ai. E.g., \"Speak in a cheerful, upbeat tone.\"")
+                .foregroundColor(.secondary)
+
+            TextEditor(text: $app.audioGlobalStyle)
+                .font(.system(.body, design: .monospaced))
+                .frame(minHeight: 100)
+                .overlay(RoundedRectangle(cornerRadius: 8).stroke(Color.gray.opacity(0.2)))
 
             Text("Tip: Keep MP3 for small file sizes and broad compatibility in Anki.")
                 .foregroundColor(.secondary)
@@ -39,10 +50,11 @@ struct AudioSettingsView: View {
         do {
             guard let apiKey = Keychain.loadAPIKey() else { throw NSError(domain: "", code: -1, userInfo: [NSLocalizedDescriptionKey: "Set API key (⌘,) first."]) }
             let client = OpenAIClient(cfg: .init(apiKey: apiKey))
-            let data = try await client.synthesize(input: "Bonjour, faisons un test de voix.",
+            let data = try await client.synthesize(input: app.audioTestText,
                                                    voice: app.ttsVoice,
                                                    format: app.audioFormat.rawValue,
-                                                   model: "gpt-4o-mini-tts")
+                                                   model: "gpt-4o-mini-tts",
+                                                   instructions: app.audioGlobalStyle)
             try await MainActor.run {
                 player = try AVAudioPlayer(data: data)
                 player?.play()

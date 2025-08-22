@@ -31,12 +31,24 @@ final class AppState: ObservableObject {
     slight exaggeration for memorability, no text or captions, no watermarks.
     """
 
+    // audio global style/system instruction (user-editable)
+    @Published var audioGlobalStyle: String = """
+    Language: French
+    Accent/Affect: Warm, refined, and gently instructive, reminiscent of a friendly language instructor.
+    Tone: Calm, encouraging, and articulate.
+    Pacing: Slow and deliberate.
+    Emotion: Cheerful, supportive, and pleasantly enthusiastic.
+    Pronunciation: Clearly articulate terminology with gentle emphasis.
+    Personality Affect: Friendly and approachable with a hint of sophistication; speak confidently and reassuringly.
+    """
+
     // image size/quality
     @Published var imageSize: String = "1024x1024" // also: 1536x1024, 1024x1536
     @Published var imageQuality: String = "medium" // low|medium|high|auto
 
     // audio
     @Published var ttsVoice: String = "alloy"
+    @Published var audioTestText: String = "Bonjour, faisons un test de voix."
     @Published var audioFormat: AudioFormat = .mp3
     @Published var synthesizeBackToo: Bool = false
 

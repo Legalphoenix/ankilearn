@@ -152,7 +152,7 @@ struct BuildView: View {
                             let audioTaskResult: Result<String, Error> = await {
                                 do {
                                     let audioData = try await retry(times: 3, delay: 2.0) {
-                                        try await client.synthesize(input: card.phrase, voice: app.ttsVoice, format: app.audioFormat.rawValue, model: "gpt-4o-mini-tts")
+                                        try await client.synthesize(input: card.phrase, voice: app.ttsVoice, format: app.audioFormat.rawValue, model: "gpt-4o-mini-tts", instructions: app.audioGlobalStyle)
                                     }
                                     let audioURL = mediaDir.appendingPathComponent(sndName)
                                     try audioData.write(to: audioURL)
