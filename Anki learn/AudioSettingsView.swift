@@ -21,13 +21,16 @@ struct AudioSettingsView: View {
                 }
                 Toggle("Also synthesize translation (back)", isOn: $app.synthesizeBackToo)
                 Spacer()
+                TextField("Test text", text: $app.audioTestText)
+                    .textFieldStyle(RoundedBorderTextFieldStyle())
+                    .frame(maxWidth: 250)
                 Button("Test Voice") {
                     Task { await testVoice() }
                 }
             }
             .padding(.bottom, 8)
 
-            Text("Global instructions (prepended to every card). E.g., \"Speak in a cheerful, upbeat tone.\"")
+            Text("Global instructions to change the tone and language of the ai. E.g., \"Speak in a cheerful, upbeat tone.\"")
                 .foregroundColor(.secondary)
 
             TextEditor(text: $app.audioGlobalStyle)
@@ -47,7 +50,7 @@ struct AudioSettingsView: View {
         do {
             guard let apiKey = Keychain.loadAPIKey() else { throw NSError(domain: "", code: -1, userInfo: [NSLocalizedDescriptionKey: "Set API key (⌘,) first."]) }
             let client = OpenAIClient(cfg: .init(apiKey: apiKey))
-            let data = try await client.synthesize(input: "Bonjour, faisons un test de voix.",
+            let data = try await client.synthesize(input: app.audioTestText,
                                                    voice: app.ttsVoice,
                                                    format: app.audioFormat.rawValue,
                                                    model: "gpt-4o-mini-tts",
