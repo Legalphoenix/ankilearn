@@ -53,11 +53,25 @@ final class OpenAIClient {
         let voice: String       // "alloy", "ash", ...
         let input: String
         let format: String      // "mp3"|"wav"|"opus"|"aac"|"flac"
+        let instructions: String?
     }
 
-    func synthesize(input: String, voice: String, format: String, model: String) async throws -> Data {
-        let body = TTSBody(model: model, voice: voice, input: input, format: format)
-        let req = makeRequest(path: "/v1/audio/speech", json: try JSONEncoder().encode(body))
+    func synthesize(input: String, voice: String, format: String, model: String, instructions: String? = nil) async throws -> Data {
+        let body = TTSBody(model: model, voice: voice, input: input, format: format, instructions: instructions)
+
+        var bodyDict: [String: Any] = [
+            "model": body.model,
+            "voice": body.voice,
+            "input": body.input,
+            "format": body.format
+        ]
+        if let instructions = body.instructions, !instructions.isEmpty {
+            bodyDict["instructions"] = instructions
+        }
+
+        let jsonData = try JSONSerialization.data(withJSONObject: bodyDict)
+        let req = makeRequest(path: "/v1/audio/speech", json: jsonData)
+
         let (data, resp) = try await URLSession.shared.data(for: req)
         guard let http = resp as? HTTPURLResponse, (200..<300).contains(http.statusCode) else {
             throw Self.makeHTTPError(data: data, fallback: "TTS failed")

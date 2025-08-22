@@ -31,6 +31,9 @@ final class AppState: ObservableObject {
     slight exaggeration for memorability, no text or captions, no watermarks.
     """
 
+    // audio global style/system instruction (user-editable)
+    @Published var audioGlobalStyle: String = ""
+
     // image size/quality
     @Published var imageSize: String = "1024x1024" // also: 1536x1024, 1024x1536
     @Published var imageQuality: String = "medium" // low|medium|high|auto
