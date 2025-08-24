@@ -15,6 +15,9 @@ struct ContentView: View {
         .sheet(isPresented: $app.showSettingsSheet) {
             SettingsView()
         }
+        .onAppear {
+            app.loadSavedLists()
+        }
     }
 }
 

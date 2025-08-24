@@ -4,6 +4,7 @@ import UniformTypeIdentifiers
 struct ImportView: View {
     @EnvironmentObject var app: AppState
     @State private var droppedText: String = ""
+    @State private var fileURL: URL?
     @State private var showOpenPanel = false
 
     var body: some View {
@@ -14,7 +15,7 @@ struct ImportView: View {
             Text("Drop a UTF-8 text file with TAB-separated lines:  <phrase>\\t<translation>")
                 .foregroundColor(.secondary)
 
-            DropArea(droppedText: $droppedText)
+            DropArea(droppedText: $droppedText, fileURL: $fileURL)
                 .frame(height: 140)
 
             HStack {
@@ -35,12 +36,50 @@ struct ImportView: View {
                 .frame(minHeight: 240)
             }
 
+            if !app.savedLists.isEmpty {
+                Text("Saved Lists")
+                    .font(.title2.bold())
+                    .padding(.top)
+
+                List {
+                    ForEach(app.savedLists) { list in
+                        HStack {
+                            Text(list.name)
+                            Text(list.createdAt, style: .date)
+                                .foregroundColor(.secondary)
+                            Spacer()
+                            Button("Load") {
+                                app.cards = Parser.parseTSV(list.content)
+                            }
+                            Button("Delete") {
+                                app.savedLists.removeAll { $0.id == list.id }
+                                app.saveLists()
+                            }
+                        }
+                    }
+                }
+            }
+
             Spacer()
         }
         .padding()
         .onChange(of: droppedText) { newValue in
             if !newValue.isEmpty {
                 app.cards = Parser.parseTSV(newValue)
+
+                let listName: String
+                if let url = fileURL {
+                    listName = url.deletingPathExtension().lastPathComponent
+                } else {
+                    listName = "Pasted Text"
+                }
+
+                let newList = SavedList(name: listName, content: newValue, createdAt: Date())
+
+                if !app.savedLists.contains(where: { $0.content == newList.content }) {
+                    app.savedLists.append(newList)
+                    app.saveLists()
+                }
             }
         }
     }
@@ -52,6 +91,7 @@ struct ImportView: View {
         panel.canChooseDirectories = false
         panel.begin { resp in
             if resp == .OK, let url = panel.url {
+                self.fileURL = url
                 if let txt = try? String(contentsOf: url, encoding: .utf8) {
                     droppedText = txt
                 }
@@ -62,6 +102,7 @@ struct ImportView: View {
 
 struct DropArea: View {
     @Binding var droppedText: String
+    @Binding var fileURL: URL?
 
     var body: some View {
         RoundedRectangle(cornerRadius: 8)
@@ -77,6 +118,7 @@ struct DropArea: View {
                     guard let url else { return }
                     if let txt = try? String(contentsOf: url, encoding: .utf8) {
                         DispatchQueue.main.async {
+                            self.fileURL = url
                             droppedText = txt
                         }
                     }

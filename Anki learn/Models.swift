@@ -7,6 +7,13 @@ struct Card: Identifiable, Hashable {
     var translation: String
 }
 
+struct SavedList: Codable, Identifiable, Hashable {
+    var id = UUID()
+    var name: String
+    var content: String
+    var createdAt: Date
+}
+
 enum AudioFormat: String, CaseIterable, Identifiable {
     case mp3, wav, opus, aac, flac
     var id: String { rawValue }
@@ -23,6 +30,7 @@ struct BuildProgress: Identifiable {
 final class AppState: ObservableObject {
     // cards
     @Published var cards: [Card] = []
+    @Published var savedLists: [SavedList] = []
 
     // image global style/system instruction (user-editable)
     @Published var imageGlobalStyle: String =
@@ -69,4 +77,24 @@ final class AppState: ObservableObject {
 
     // per-card overrides (optional future)
     // var overrides: [UUID: String] = [:]
+
+    private let savedListsKey = "savedLists"
+
+    func saveLists() {
+        do {
+            let data = try JSONEncoder().encode(savedLists)
+            UserDefaults.standard.set(data, forKey: savedListsKey)
+        } catch {
+            print("Error saving lists: \(error)")
+        }
+    }
+
+    func loadSavedLists() {
+        guard let data = UserDefaults.standard.data(forKey: savedListsKey) else { return }
+        do {
+            savedLists = try JSONDecoder().decode([SavedList].self, from: data)
+        } catch {
+            print("Error loading lists: \(error)")
+        }
+    }
 }
