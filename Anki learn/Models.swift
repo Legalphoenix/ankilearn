@@ -68,6 +68,8 @@ final class AppState: ObservableObject {
     @AppStorage("copyToAnki") var copyToAnki: Bool = true
 
     // building
+    @Published var includeImages: Bool = true
+    @Published var includeAudio: Bool = true
     @Published var isBuilding = false
     @Published var progress = BuildProgress()
 

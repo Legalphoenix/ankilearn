@@ -26,6 +26,9 @@ struct BuildView: View {
                 .textFieldStyle(RoundedBorderTextFieldStyle())
                 .frame(maxWidth: 250)
 
+            Toggle("Include Images", isOn: $app.includeImages)
+            Toggle("Include Audio", isOn: $app.includeAudio)
+
             HStack(spacing: 12) {
                 Button(app.isBuilding ? "Stop" : "Start Build") {
                     if app.isBuilding {
@@ -36,7 +39,7 @@ struct BuildView: View {
                     }
                 }
                 .keyboardShortcut(.return, modifiers: .command)
-                .disabled(app.cards.isEmpty || app.exportFolderURL == nil)
+                .disabled(app.cards.isEmpty || app.exportFolderURL == nil || (!app.includeImages && !app.includeAudio))
 
                 if app.isBuilding {
                     ProgressView(value: Double(app.progress.completed),
@@ -98,7 +101,10 @@ struct BuildView: View {
         }
 
         app.isBuilding = true
-        app.progress = .init(total: app.cards.count * 2, completed: 0, failed: 0, currentStatus: "Starting…")
+        var totalTasks = 0
+        if app.includeImages { totalTasks += app.cards.count }
+        if app.includeAudio { totalTasks += app.cards.count }
+        app.progress = .init(total: totalTasks, completed: 0, failed: 0, currentStatus: "Starting…")
         log.removeAll()
 
         runningTask = Task {
@@ -111,8 +117,8 @@ struct BuildView: View {
             struct CardResult {
                 let cardId: UUID
                 let cardIndex: Int
-                let imageResult: Result<String, Error>
-                let audioResult: Result<String, Error>
+            let imageResult: Result<String, Error>?
+            let audioResult: Result<String, Error>?
             }
 
             var imageNames: [UUID: String] = [:]
@@ -131,9 +137,10 @@ struct BuildView: View {
                 await withTaskGroup(of: CardResult.self) { group in
                     for card in chunk {
                         group.addTask {
-                            // --- IMAGE ---
+                        var imageTaskResult: Result<String, Error>?
+                        if app.includeImages {
                             let imgName = "\(runId)_\(String(format: "%04d", card.index))_img.jpg"
-                            let imageTaskResult: Result<String, Error> = await {
+                            imageTaskResult = await {
                                 do {
                                     let prompt = PromptBuilder.scenePrompt(globalStyle: app.imageGlobalStyle, phrase: card.phrase, translation: card.translation)
                                     let imgData = try await retry(times: 10, delay: 2.0) {
@@ -144,12 +151,14 @@ struct BuildView: View {
                                     return .success(imgName)
                                 } catch {
                                     return .failure(error)
-                                }
+                                    }
                             }()
+                        }
 
-                            // --- AUDIO ---
+                        var audioTaskResult: Result<String, Error>?
+                        if app.includeAudio {
                             let sndName = "\(runId)_\(String(format: "%04d", card.index))_audio.\(app.audioFormat.rawValue)"
-                            let audioTaskResult: Result<String, Error> = await {
+                            audioTaskResult = await {
                                 do {
                                     let audioData = try await retry(times: 10, delay: 2.0) {
                                         try await client.synthesize(input: card.phrase, voice: app.ttsVoice, format: app.audioFormat.rawValue, model: "gpt-4o-mini-tts", instructions: app.audioGlobalStyle)
@@ -159,8 +168,9 @@ struct BuildView: View {
                                     return .success(sndName)
                                 } catch {
                                     return .failure(error)
-                                }
+                                    }
                             }()
+                        }
 
                             return CardResult(cardId: card.id, cardIndex: card.index, imageResult: imageTaskResult, audioResult: audioTaskResult)
                         }
@@ -168,7 +178,8 @@ struct BuildView: View {
 
                     // Process results as they complete
                     for await result in group {
-                        switch result.imageResult {
+                    if let imageResult = result.imageResult {
+                        switch imageResult {
                         case .success(let filename):
                             imageNames[result.cardId] = filename
                             log.append("✓ Image \(result.cardIndex): \(filename)")
@@ -177,8 +188,10 @@ struct BuildView: View {
                             app.progress.failed += 1
                         }
                         app.progress.completed += 1
+                        }
 
-                        switch result.audioResult {
+                    if let audioResult = result.audioResult {
+                        switch audioResult {
                         case .success(let filename):
                             audioNames[result.cardId] = filename
                             log.append("✓ Audio \(result.cardIndex): \(filename)")
@@ -187,6 +200,7 @@ struct BuildView: View {
                             app.progress.failed += 1
                         }
                         app.progress.completed += 1
+                        }
                     }
                 }
             }
