@@ -147,7 +147,18 @@ final class RealtimeAPIClient: NSObject, URLSessionWebSocketDelegate {
     }
 
     func urlSession(_ session: URLSession, webSocketTask: URLSessionWebSocketTask, didCloseWith closeCode: URLSessionWebSocketTask.CloseCode, reason: Data?) {
-        // Optional: handle closure, maybe resume with an error if unexpected
+        // If the continuation is still around, it means we didn't complete successfully.
+        // Resume with an error to prevent the caller from hanging.
+        if continuation != nil {
+            let reasonString = reason.flatMap { String(data: $0, encoding: .utf8) } ?? "No reason provided"
+            let error = NSError(
+                domain: "RealtimeAPIClient",
+                code: Int(closeCode.rawValue),
+                userInfo: [NSLocalizedDescriptionKey: "WebSocket closed unexpectedly. Code: \(closeCode.rawValue), Reason: \(reasonString)"]
+            )
+            continuation?.resume(throwing: error)
+            self.continuation = nil // Ensure it's not called again
+        }
     }
 
     func urlSession(_ session: URLSession, task: URLSessionTask, didCompleteWithError error: Error?) {
