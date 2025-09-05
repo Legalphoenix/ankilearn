@@ -146,7 +146,7 @@ final class RealtimeAPIClient: NSObject, URLSessionWebSocketDelegate {
         }
     }
 
-    func urlSession(_ session: URLSession, webSocketTask: URLSessionWebSocketTask, didCloseWith closeCode: URLSession.WebSocket.CloseCode, reason: Data?) {
+    func urlSession(_ session: URLSession, webSocketTask: URLSessionWebSocketTask, didCloseWith closeCode: URLSessionWebSocketTask.CloseCode, reason: Data?) {
         // Optional: handle closure, maybe resume with an error if unexpected
     }
 }
