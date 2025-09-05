@@ -30,6 +30,9 @@ struct Sidebar: View {
                 NavigationLink(destination: ImportView()) {
                     Label("Import", systemImage: "square.and.arrow.down")
                 }
+                NavigationLink(destination: MnemonicsView()) {
+                    Label("Mnemonics", systemImage: "brain.head.profile")
+                }
                 NavigationLink(destination: ImageSettingsView()) {
                     Label("Image", systemImage: "photo")
                 }

@@ -60,6 +60,14 @@ final class AppState: ObservableObject {
     @Published var audioFormat: AudioFormat = .mp3
     @Published var synthesizeBackToo: Bool = false
 
+    // mnemonics (Realtime)
+    @Published var includeMnemonics: Bool = false
+    @Published var mnemonicInstructions: String = """
+    You are a mnemonic creating agent. Your only role is to respond by creating a mnemonic that the user can use to aid in their recall of the target word. The target word has been provided to you.
+    """
+    @Published var mnemonicPrompt: String = ""
+    @Published var realtimeModel: String = "gpt-realtime"
+
     // export location
     @Published var exportFolderURL: URL?
 
