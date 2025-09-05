@@ -39,6 +39,9 @@ struct Sidebar: View {
                 NavigationLink(destination: BuildView()) {
                     Label("Build", systemImage: "hammer")
                 }
+                NavigationLink(destination: MnemonicsView()) {
+                    Label("Mnemonics", systemImage: "brain.head.profile")
+                }
             }
         }
         .listStyle(SidebarListStyle())
