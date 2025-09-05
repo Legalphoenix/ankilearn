@@ -51,6 +51,9 @@ struct ImportView: View {
                             Button("Load") {
                                 app.cards = Parser.parseTSV(list.content)
                             }
+                            Button("Download") {
+                                downloadList(list)
+                            }
                             Button("Delete") {
                                 app.savedLists.removeAll { $0.id == list.id }
                                 app.saveLists()
@@ -95,6 +98,23 @@ struct ImportView: View {
                 if let txt = try? String(contentsOf: url, encoding: .utf8) {
                     droppedText = txt
                 }
+            }
+        }
+    }
+
+    func downloadList(_ list: SavedList) {
+        let panel = NSSavePanel()
+        panel.allowedContentTypes = [UTType.plainText]
+        let safeName = list.name.replacingOccurrences(of: "/", with: "-")
+        panel.nameFieldStringValue = safeName.isEmpty ? "list.txt" : "\(safeName).txt"
+        panel.canCreateDirectories = true
+        panel.isExtensionHidden = false
+        panel.begin { resp in
+            guard resp == .OK, let url = panel.url else { return }
+            do {
+                try list.content.write(to: url, atomically: true, encoding: .utf8)
+            } catch {
+                NSApplication.shared.presentError(error)
             }
         }
     }
