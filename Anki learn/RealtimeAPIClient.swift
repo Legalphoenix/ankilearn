@@ -4,7 +4,6 @@ final class RealtimeAPIClient: NSObject, URLSessionWebSocketDelegate {
     private var webSocketTask: URLSessionWebSocketTask?
     private var audioData = Data()
     private var continuation: CheckedContinuation<Data, Error>?
-    private var selfRetain: RealtimeAPIClient?
 
     private let apiKey: String
     private var instructions: String = ""
@@ -19,7 +18,6 @@ final class RealtimeAPIClient: NSObject, URLSessionWebSocketDelegate {
         self.instructions = instructions
         self.prompt = prompt
         self.audioData = Data()
-        self.selfRetain = self
 
         return try await withCheckedThrowingContinuation { continuation in
             self.continuation = continuation
@@ -90,8 +88,8 @@ final class RealtimeAPIClient: NSObject, URLSessionWebSocketDelegate {
                 switch message {
                 case .string(let text):
                     self.handleStringMessage(text)
-                case .data:
-                    break
+                case .data(let data):
+                    self.audioData.append(data)
                 @unknown default:
                     break
                 }
@@ -133,7 +131,6 @@ final class RealtimeAPIClient: NSObject, URLSessionWebSocketDelegate {
         self.webSocketTask?.cancel(with: .goingAway, reason: nil)
         self.webSocketTask = nil
         self.continuation = nil
-        self.selfRetain = nil
     }
 
     func urlSession(_ session: URLSession, webSocketTask: URLSessionWebSocketTask, didOpenWithProtocol protocol: String?) {
