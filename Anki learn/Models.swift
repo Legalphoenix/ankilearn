@@ -55,6 +55,12 @@ final class AppState: ObservableObject {
         didSet { UserDefaults.standard.set(imagePromptTemplate, forKey: imagePromptTemplateKey) }
     }
 
+    // mnemonic image prompt template (user-editable). Supports variables:
+    // {mnemonic_text}, {global_style}
+    @Published var mnemonicImagePromptTemplate: String = "" {
+        didSet { UserDefaults.standard.set(mnemonicImagePromptTemplate, forKey: mnemonicImagePromptTemplateKey) }
+    }
+
     // audio global style/system instruction (user-editable)
     @Published var audioGlobalStyle: String = """
     Language: French
@@ -78,6 +84,7 @@ final class AppState: ObservableObject {
 
     // mnemonics (Realtime)
     @Published var includeMnemonics: Bool = false
+    @Published var includeMnemonicImages: Bool = false
     @Published var mnemonicInstructions: String = """
     You are a mnemonic creating agent. Your only role is to respond by creating a mnemonic that the user can use to aid in their recall of the target word. The target word has been provided to you.
     """ {
@@ -111,6 +118,7 @@ final class AppState: ObservableObject {
     private let savedListsKey = "savedLists"
     private let imageGlobalStyleKey = "imageGlobalStyle"
     private let imagePromptTemplateKey = "imagePromptTemplate"
+    private let mnemonicImagePromptTemplateKey = "mnemonicImagePromptTemplate"
     private let mnemonicInstructionsKey = "mnemonicInstructions"
 
     func saveLists() {
@@ -141,6 +149,9 @@ final class AppState: ObservableObject {
         }
         if let saved = UserDefaults.standard.string(forKey: imagePromptTemplateKey), !saved.isEmpty {
             self.imagePromptTemplate = saved
+        }
+        if let saved = UserDefaults.standard.string(forKey: mnemonicImagePromptTemplateKey) {
+            self.mnemonicImagePromptTemplate = saved
         }
     }
 }

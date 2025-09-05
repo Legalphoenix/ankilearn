@@ -29,6 +29,7 @@ struct BuildView: View {
             Toggle("Include Images", isOn: $app.includeImages)
             Toggle("Include Audio", isOn: $app.includeAudio)
             Toggle("Include Mnemonics", isOn: $app.includeMnemonics)
+            Toggle("Include Mnemonic Images", isOn: $app.includeMnemonicImages)
 
             HStack(spacing: 12) {
                 Button(app.isBuilding ? "Stop" : "Start Build") {
@@ -40,7 +41,7 @@ struct BuildView: View {
                     }
                 }
                 .keyboardShortcut(.return, modifiers: .command)
-                .disabled(app.cards.isEmpty || app.exportFolderURL == nil || (!app.includeImages && !app.includeAudio && !app.includeMnemonics))
+                .disabled(app.cards.isEmpty || app.exportFolderURL == nil || (!app.includeImages && !app.includeAudio && !app.includeMnemonics && !app.includeMnemonicImages))
 
                 if app.isBuilding {
                     ProgressView(value: Double(app.progress.completed),
@@ -106,6 +107,8 @@ struct BuildView: View {
         if app.includeImages { totalTasks += app.cards.count }
         if app.includeAudio { totalTasks += app.cards.count }
         if app.includeMnemonics { totalTasks += app.cards.count }
+        if app.includeMnemonicImages { totalTasks += app.cards.count }
+        if app.includeMnemonics { totalTasks += app.cards.count }
         app.progress = .init(total: totalTasks, completed: 0, failed: 0, currentStatus: "Starting…")
         log.removeAll()
 
@@ -122,11 +125,13 @@ struct BuildView: View {
                 let imageResult: Result<String, Error>?
                 let audioResult: Result<String, Error>?
                 let mnemonicResult: Result<String, Error>?
+                let mnemonicImageResult: Result<String, Error>?
             }
 
             var imageNames: [UUID: String] = [:]
             var audioNames: [UUID: String] = [:]
             var mnemonicNames: [UUID: String] = [:]
+            var mnemonicImageNames: [UUID: String] = [:]
 
             let chunkSize = 25 // Process 25 cards concurrently
             let cardChunks = app.cards.chunked(into: chunkSize)
@@ -180,29 +185,51 @@ struct BuildView: View {
                         }
 
                         var mnemonicTaskResult: Result<String, Error>?
-                        if app.includeMnemonics {
-                            let mneName = "\(runId)_\(String(format: "%04d", card.index))_mnemonic.wav"
-                            mnemonicTaskResult = await {
-                                do {
-                                    let rt = RealtimeClient(cfg: .init(apiKey: apiKey, model: app.realtimeModel))
-                                    let pcm = try await retry(times: 5, delay: 2.0) {
-                                        try await rt.generateMnemonicAudio(
-                                            instructions: app.mnemonicInstructions,
-                                            targetWord: card.phrase,
-                                            voice: app.ttsVoice
-                                        )
-                                    }
-                                    let wav = AudioUtil.pcm16ToWav(pcm)
-                                    let fileURL = mediaDir.appendingPathComponent(mneName)
-                                    try wav.write(to: fileURL)
-                                    return .success(mneName)
-                                } catch {
-                                    return .failure(error)
+                        var mnemonicImageTaskResult: Result<String, Error>?
+                        if app.includeMnemonics || app.includeMnemonicImages {
+                            do {
+                                let rt = RealtimeClient(cfg: .init(apiKey: apiKey, model: app.realtimeModel))
+                                let out = try await retry(times: 5, delay: 2.0) {
+                                    try await rt.generateMnemonic(
+                                        instructions: app.mnemonicInstructions,
+                                        targetWord: card.phrase,
+                                        voice: app.ttsVoice
+                                    )
                                 }
-                            }()
+                                if app.includeMnemonics {
+                                    let mneName = "\(runId)_\(String(format: "%04d", card.index))_mnemonic.wav"
+                                    do {
+                                        let wav = AudioUtil.pcm16ToWav(out.audio)
+                                        let fileURL = mediaDir.appendingPathComponent(mneName)
+                                        try wav.write(to: fileURL)
+                                        mnemonicTaskResult = .success(mneName)
+                                    } catch {
+                                        mnemonicTaskResult = .failure(error)
+                                    }
+                                }
+                                if app.includeMnemonicImages {
+                                    let prompt = PromptBuilder.renderMnemonicImagePrompt(template: app.mnemonicImagePromptTemplate,
+                                                                                         globalStyle: app.imageGlobalStyle,
+                                                                                         mnemonicText: out.text)
+                                    let imgName = "\(runId)_\(String(format: "%04d", card.index))_mnimg.jpg"
+                                    do {
+                                        let data = try await retry(times: 10, delay: 2.0) {
+                                            try await client.generateImage(prompt: prompt, size: app.imageSize, quality: app.imageQuality, format: "jpeg")
+                                        }
+                                        let url = mediaDir.appendingPathComponent(imgName)
+                                        try data.write(to: url)
+                                        mnemonicImageTaskResult = .success(imgName)
+                                    } catch {
+                                        mnemonicImageTaskResult = .failure(error)
+                                    }
+                                }
+                            } catch {
+                                if app.includeMnemonics { mnemonicTaskResult = .failure(error) }
+                                if app.includeMnemonicImages { mnemonicImageTaskResult = .failure(error) }
+                            }
                         }
 
-                            return CardResult(cardId: card.id, cardIndex: card.index, imageResult: imageTaskResult, audioResult: audioTaskResult, mnemonicResult: mnemonicTaskResult)
+                            return CardResult(cardId: card.id, cardIndex: card.index, imageResult: imageTaskResult, audioResult: audioTaskResult, mnemonicResult: mnemonicTaskResult, mnemonicImageResult: mnemonicImageTaskResult)
                         }
                     }
 
@@ -235,9 +262,20 @@ struct BuildView: View {
                         switch mnemonicResult {
                         case .success(let filename):
                             mnemonicNames[result.cardId] = filename
-                            log.append("✓ Mnemonic \(result.cardIndex): \(filename)")
+                            log.append("✓ Mnemonic Audio \(result.cardIndex): \(filename)")
                         case .failure(let error):
-                            log.append("✗ Mnemonic \(result.cardIndex) failed: \(error.localizedDescription)")
+                            log.append("✗ Mnemonic Audio \(result.cardIndex) failed: \(error.localizedDescription)")
+                            app.progress.failed += 1
+                        }
+                        app.progress.completed += 1
+                    }
+                    if let mnemonicImageResult = result.mnemonicImageResult {
+                        switch mnemonicImageResult {
+                        case .success(let filename):
+                            mnemonicImageNames[result.cardId] = filename
+                            log.append("✓ Mnemonic Image \(result.cardIndex): \(filename)")
+                        case .failure(let error):
+                            log.append("✗ Mnemonic Image \(result.cardIndex) failed: \(error.localizedDescription)")
                             app.progress.failed += 1
                         }
                         app.progress.completed += 1
@@ -249,7 +287,7 @@ struct BuildView: View {
             // write TSV at the end
             if !Task.isCancelled {
                 do {
-                    let filename = try AnkiExporter.writeExport(cards: app.cards, imageNames: imageNames, audioNames: audioNames, mnemonicNames: mnemonicNames, to: folder, runId: runId)
+                    let filename = try AnkiExporter.writeExport(cards: app.cards, imageNames: imageNames, audioNames: audioNames, mnemonicNames: mnemonicNames, mnemonicImageNames: mnemonicImageNames, to: folder, runId: runId)
                     await MainActor.run { log.append("✓ Wrote \(filename)") }
                 } catch {
                     await MainActor.run { log.append("✗ Writing deck TSV failed: \(error.localizedDescription)") }

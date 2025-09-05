@@ -27,6 +27,14 @@ struct ImageSettingsView: View {
                 .frame(minHeight: 160)
                 .overlay(RoundedRectangle(cornerRadius: 8).stroke(Color.gray.opacity(0.2)))
 
+            Text("Mnemonic image template (optional). Supports {mnemonic_text}, {global_style}. If empty, uses the mnemonic text directly.")
+                .foregroundColor(.secondary)
+
+            TextEditor(text: $app.mnemonicImagePromptTemplate)
+                .font(.system(.body, design: .monospaced))
+                .frame(minHeight: 120)
+                .overlay(RoundedRectangle(cornerRadius: 8).stroke(Color.gray.opacity(0.2)))
+
             HStack {
                 Picker("Size", selection: $app.imageSize) {
                     Text("1024×1024").tag("1024x1024")

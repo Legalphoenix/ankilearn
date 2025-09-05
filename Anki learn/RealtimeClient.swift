@@ -9,6 +9,10 @@ import Foundation
 /// - Finishes on `response.done` / `response.audio.done`.
 /// Event shapes may evolve; adjust keys if OpenAI updates the API.
 final class RealtimeClient {
+    struct MnemonicOut {
+        let audio: Data
+        let text: String
+    }
     struct Config {
         var apiKey: String
         var model: String = "gpt-realtime"
@@ -36,11 +40,11 @@ final class RealtimeClient {
         }
     }
 
-    /// Connects, requests an audio response, gathers audio, then closes.
-    func generateMnemonicAudio(instructions: String,
-                               targetWord: String,
-                               voice: String,
-                               logger: ((String) -> Void)? = nil) async throws -> Data {
+    /// Connects, requests audio+text response, gathers both, then closes.
+    func generateMnemonic(instructions: String,
+                          targetWord: String,
+                          voice: String,
+                          logger: ((String) -> Void)? = nil) async throws -> MnemonicOut {
         var req = URLRequest(url: URL(string: "\(cfg.baseURL.absoluteString)?model=\(cfg.model)")!)
         req.setValue("Bearer \(cfg.apiKey)", forHTTPHeaderField: "Authorization")
         // Some deployments still expect this beta header; harmless if ignored.
@@ -52,6 +56,7 @@ final class RealtimeClient {
         let task = session.webSocketTask(with: req)
 
         var audioData = Data()
+        var textOut = ""
         var isDone = false
         var sessionReady = false
         var userItemCreated = false
@@ -145,8 +150,16 @@ final class RealtimeClient {
                 return
             }
 
-            // Completion signals
-            if type == "response.done" || type == "response.audio.done" {
+            // Gather text chunks (support multiple event names: text and audio transcript)
+            if type == "response.output_text.delta" || type == "response.text.delta" || type == "response.audio_transcript.delta" {
+                if let delta = obj["delta"] as? String {
+                    textOut += delta
+                }
+                return
+            }
+
+            // Completion signals (support both GA names for text + transcript)
+            if type == "response.done" || type == "response.audio.done" || type == "response.output_text.done" || type == "response.text.done" || type == "response.audio_transcript.done" {
                 isDone = true
                 return
             }
@@ -229,6 +242,6 @@ final class RealtimeClient {
 
         if let err = receiveError { throw err }
         guard !audioData.isEmpty else { throw RealtimeError.noAudio }
-        return audioData
+        return MnemonicOut(audio: audioData, text: textOut)
     }
 }

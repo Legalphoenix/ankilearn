@@ -4,11 +4,14 @@ import AVFoundation
 struct MnemonicsView: View {
     @EnvironmentObject var app: AppState
     @State private var isLoading = false
+    @State private var isGeneratingImage = false
     @State private var player: AVAudioPlayer?
     @State private var lastError: String?
     @State private var debugEnabled = true
     @State private var debugLines: [String] = []
     @State private var lastAudioWav: Data? = nil
+    @State private var lastText: String = ""
+    @State private var previewImageData: Data?
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
@@ -44,11 +47,42 @@ struct MnemonicsView: View {
                         .disabled(isLoading || app.mnemonicPrompt.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
                     Button("Replay") { replay() }
                         .disabled(isLoading || lastAudioWav == nil)
+                    Button("Generate Image from text") { Task { await generateImageFromText() } }
+                        .disabled(isLoading || isGeneratingImage || lastText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
                 }
             }
 
             if isLoading { ProgressView().padding(.vertical, 4) }
             if let err = lastError { Text(err).foregroundColor(.red) }
+
+            if !lastText.isEmpty {
+                Text("Mnemonic text (read-only)").foregroundColor(.secondary)
+                HStack(alignment: .top) {
+                    ScrollView {
+                        Text(lastText)
+                            .font(.system(.body, design: .monospaced))
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                    }
+                    .frame(minHeight: 80)
+                    Button("Copy") {
+                        NSPasteboard.general.clearContents()
+                        NSPasteboard.general.setString(lastText, forType: .string)
+                    }
+                }
+                .overlay(RoundedRectangle(cornerRadius: 8).stroke(Color.gray.opacity(0.2)))
+            }
+
+            if let data = previewImageData, let img = NSImage(data: data) {
+                Text("Preview: Image from mnemonic text")
+                    .foregroundColor(.secondary)
+                HStack {
+                    Image(nsImage: img)
+                        .resizable()
+                        .aspectRatio(contentMode: .fit)
+                        .frame(width: 256, height: 256)
+                    Spacer()
+                }
+            }
 
             Group {
                 HStack {
@@ -91,7 +125,7 @@ struct MnemonicsView: View {
 
         do {
             let rt = RealtimeClient(cfg: .init(apiKey: apiKey, model: app.realtimeModel))
-            let audio = try await rt.generateMnemonicAudio(
+            let out = try await rt.generateMnemonic(
                 instructions: app.mnemonicInstructions,
                 targetWord: target,
                 voice: app.ttsVoice,
@@ -100,11 +134,14 @@ struct MnemonicsView: View {
                     DispatchQueue.main.async { debugLines.append(line) }
                 }
             )
-            // Realtime WS returns raw PCM16 @ 24kHz mono; wrap in WAV for AVAudioPlayer
-            let wav = AudioUtil.pcm16ToWav(audio)
+            // Play audio
+            let wav = AudioUtil.pcm16ToWav(out.audio)
             lastAudioWav = wav
             player = try AVAudioPlayer(data: wav)
             player?.play()
+            // Save text
+            lastText = out.text
+            if debugEnabled { debugLines.append("Text: \(out.text)") }
         } catch {
             lastError = error.localizedDescription
         }
@@ -124,6 +161,27 @@ struct MnemonicsView: View {
             } catch {
                 lastError = error.localizedDescription
             }
+        }
+    }
+
+    @MainActor
+    private func generateImageFromText() async {
+        guard !lastText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
+        guard let apiKey = Keychain.loadAPIKey() else {
+            lastError = "Set API key (⌘,) first."
+            return
+        }
+        isGeneratingImage = true
+        defer { isGeneratingImage = false }
+        do {
+            let client = OpenAIClient(cfg: .init(apiKey: apiKey))
+            let prompt = PromptBuilder.renderMnemonicImagePrompt(template: app.mnemonicImagePromptTemplate,
+                                                                 globalStyle: app.imageGlobalStyle,
+                                                                 mnemonicText: lastText)
+            let data = try await client.generateImage(prompt: prompt, size: app.imageSize, quality: app.imageQuality, format: "jpeg")
+            previewImageData = data
+        } catch {
+            lastError = error.localizedDescription
         }
     }
 }

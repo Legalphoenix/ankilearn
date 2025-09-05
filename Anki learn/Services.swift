@@ -111,6 +111,7 @@ enum AnkiExporter {
                             imageNames: [UUID: String],
                             audioNames: [UUID: String],
                             mnemonicNames: [UUID: String],
+                            mnemonicImageNames: [UUID: String],
                             to folder: URL,
                             runId: String) throws -> String
     {
@@ -122,12 +123,14 @@ enum AnkiExporter {
             let imgName = imageNames[c.id] ?? ""
             let audName = audioNames[c.id] ?? ""
             let mneName = mnemonicNames[c.id] ?? ""
+            let mniName = mnemonicImageNames[c.id] ?? ""
 
             let imgTag = imgName.isEmpty ? "" : "<img src=\"\(imgName)\">"
             let sndTag = audName.isEmpty ? "" : "[sound:\(audName)]"
             let mneTag = mneName.isEmpty ? "" : "[sound:\(mneName)]"
+            let mniTag = mniName.isEmpty ? "" : "<img src=\"\(mniName)\">"
 
-            rows.append("\(c.phrase)\t\(c.translation)\t\(imgTag)\t\(sndTag)\t\(mneTag)")
+            rows.append("\(c.phrase)\t\(c.translation)\t\(imgTag)\t\(sndTag)\t\(mneTag)\t\(mniTag)")
         }
         let tsv = rows.joined(separator: "\n")
         let tsvFilename = "\(runId).tsv"
@@ -230,6 +233,19 @@ enum PromptBuilder {
         out = out.replacingOccurrences(of: "{global_style}", with: globalStyle)
         out = out.replacingOccurrences(of: "{phrase}", with: phrase)
         out = out.replacingOccurrences(of: "{translation}", with: translation)
+        return out
+    }
+
+    /// Renders mnemonic→image prompt template.
+    /// Supported tokens: {mnemonic_text}, {global_style}
+    static func renderMnemonicImagePrompt(template: String, globalStyle: String, mnemonicText: String) -> String {
+        var out = template
+        out = out.replacingOccurrences(of: "{global_style}", with: globalStyle)
+        out = out.replacingOccurrences(of: "{mnemonic_text}", with: mnemonicText)
+        if out.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            // Default to using the mnemonic text alone if template is blank
+            return mnemonicText
+        }
         return out
     }
 }
