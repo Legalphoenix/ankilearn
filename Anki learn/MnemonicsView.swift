@@ -8,15 +8,16 @@ struct MnemonicsView: View {
     @State private var isGenerating = false
     @State private var statusMessage = "Idle"
     @State private var generatedAudioData: Data?
+    @State private var logMessages: [String] = []
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
-            Text("Mnemonic Generation")
+            Text("Mnemonic Generation (Debug)")
                 .font(.title2.bold())
 
             Text("Instructions")
             TextEditor(text: $instructions)
-                .frame(height: 150)
+                .frame(height: 100)
                 .overlay(RoundedRectangle(cornerRadius: 8).stroke(Color.gray.opacity(0.2)))
                 .disabled(isGenerating)
 
@@ -39,10 +40,27 @@ struct MnemonicsView: View {
                     saveAudio()
                 }
                 .disabled(generatedAudioData == nil)
+
+                Spacer()
+
+                Button("Clear Logs") {
+                    logMessages.removeAll()
+                }
             }
 
             Text(statusMessage)
                 .foregroundColor(.secondary)
+
+            // Log Console
+            ScrollView {
+                LazyVStack(alignment: .leading, spacing: 4) {
+                    ForEach(logMessages, id: \.self) { Text($0).font(.system(size: 11, design: .monospaced)) }
+                }
+                .padding(8)
+            }
+            .frame(minHeight: 100, maxHeight: .infinity)
+            .overlay(RoundedRectangle(cornerRadius: 8).stroke(Color.gray.opacity(0.2)))
+
 
             Spacer()
         }
@@ -55,6 +73,7 @@ struct MnemonicsView: View {
             return
         }
 
+        logMessages.removeAll()
         isGenerating = true
         statusMessage = "Generating..."
         generatedAudioData = nil
@@ -62,7 +81,11 @@ struct MnemonicsView: View {
         Task {
             do {
                 let client = RealtimeAPIClient(apiKey: apiKey)
-                let data = try await client.generate(instructions: instructions, prompt: prompt)
+                let data = try await client.generate(instructions: instructions, prompt: prompt) { logMessage in
+                    DispatchQueue.main.async {
+                        self.logMessages.append(logMessage)
+                    }
+                }
 
                 await MainActor.run {
                     self.generatedAudioData = data
