@@ -44,7 +44,7 @@ final class RealtimeAPIClient: NSObject, URLSessionWebSocketDelegate {
 
     // MARK: - WebSocket Message Sending
 
-    private func sendSessionUpdate(instructions: String) async throws {
+    private func sendSessionUpdate() async throws {
         log("Sending session.update...")
         let message: [String: Any] = [
             "type": "session.update",
@@ -52,22 +52,22 @@ final class RealtimeAPIClient: NSObject, URLSessionWebSocketDelegate {
                 "type": "realtime",
                 "audio": [
                     "output": ["voice": "shimmer", "format": "mp3"]
-                ],
-                "instructions": instructions
+                ]
             ]
         ]
         try await sendMessage(dictionary: message)
     }
 
-    private func sendConversationItem(prompt: String) async throws {
+    private func sendConversationItem(instructions: String, prompt: String) async throws {
         log("Sending conversation.item.create...")
+        let fullPrompt = "\(instructions)\n\nTarget: \(prompt)"
         let message: [String: Any] = [
             "type": "conversation.item.create",
             "item": [
                 "type": "message",
                 "role": "user",
                 "content": [
-                    ["type": "input_text", "text": "Target: \(prompt)"]
+                    ["type": "input_text", "text": fullPrompt]
                 ]
             ]
         ]
@@ -80,6 +80,18 @@ final class RealtimeAPIClient: NSObject, URLSessionWebSocketDelegate {
         try await sendMessage(dictionary: message)
     }
 
+    private func sendConversation() {
+        Task {
+            do {
+                try await self.sendConversationItem(instructions: self.instructions, prompt: self.prompt)
+                try await self.sendResponseCreate()
+            } catch {
+                log("Failed to send conversation messages: \(error.localizedDescription)")
+                self.continuation?.resume(throwing: error)
+                self.closeConnection()
+            }
+        }
+    }
 
     private func sendMessage(dictionary: [String: Any]) async throws {
         let data = try JSONSerialization.data(withJSONObject: dictionary)
@@ -124,6 +136,9 @@ final class RealtimeAPIClient: NSObject, URLSessionWebSocketDelegate {
         }
 
         switch type {
+        case "session.created":
+            log("Session created. Sending conversation...")
+            sendConversation()
         case "response.output_audio.delta":
             if let audioChunkB64 = json["data"] as? String,
                let audioChunk = Data(base64Encoded: audioChunkB64) {
@@ -158,11 +173,9 @@ final class RealtimeAPIClient: NSObject, URLSessionWebSocketDelegate {
         log("Connection opened. Sending configuration...")
         Task {
             do {
-                try await self.sendSessionUpdate(instructions: self.instructions)
-                try await self.sendConversationItem(prompt: self.prompt)
-                try await self.sendResponseCreate()
+                try await self.sendSessionUpdate()
             } catch {
-                log("Failed to send initial messages: \(error.localizedDescription)")
+                log("Failed to send session.update: \(error.localizedDescription)")
                 self.continuation?.resume(throwing: error)
                 self.closeConnection()
             }
