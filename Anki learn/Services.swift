@@ -110,6 +110,7 @@ enum AnkiExporter {
     static func writeExport(cards: [Card],
                             imageNames: [UUID: String],
                             audioNames: [UUID: String],
+                            mnemonicNames: [UUID: String],
                             to folder: URL,
                             runId: String) throws -> String
     {
@@ -120,11 +121,13 @@ enum AnkiExporter {
         for c in cards {
             let imgName = imageNames[c.id] ?? ""
             let audName = audioNames[c.id] ?? ""
+            let mneName = mnemonicNames[c.id] ?? ""
 
             let imgTag = imgName.isEmpty ? "" : "<img src=\"\(imgName)\">"
             let sndTag = audName.isEmpty ? "" : "[sound:\(audName)]"
+            let mneTag = mneName.isEmpty ? "" : "[sound:\(mneName)]"
 
-            rows.append("\(c.phrase)\t\(c.translation)\t\(imgTag)\t\(sndTag)")
+            rows.append("\(c.phrase)\t\(c.translation)\t\(imgTag)\t\(sndTag)\t\(mneTag)")
         }
         let tsv = rows.joined(separator: "\n")
         let tsvFilename = "\(runId).tsv"
@@ -188,14 +191,45 @@ enum MediaCopy {
 
 // MARK: - Prompt Assembly
 
+// MARK: - Audio Utilities
+
+enum AudioUtil {
+    static func pcm16ToWav(_ pcm: Data, sampleRate: UInt32 = 24_000, channels: UInt16 = 1) -> Data {
+        var header = Data()
+        let chunkSize: UInt32 = 36 + UInt32(pcm.count)
+        let byteRate: UInt32 = sampleRate * UInt32(channels) * 2 // 16-bit = 2 bytes
+        let blockAlign: UInt16 = channels * 2
+        let bitsPerSample: UInt16 = 16
+
+        header.append("RIFF".data(using: .ascii)!)
+        header.append(chunkSize.littleEndianData)
+        header.append("WAVE".data(using: .ascii)!)
+        header.append("fmt ".data(using: .ascii)!)
+        header.append(UInt32(16).littleEndianData)          // PCM fmt chunk size
+        header.append(UInt16(1).littleEndianData)           // Audio format = 1 (PCM)
+        header.append(channels.littleEndianData)
+        header.append(sampleRate.littleEndianData)
+        header.append(byteRate.littleEndianData)
+        header.append(blockAlign.littleEndianData)
+        header.append(bitsPerSample.littleEndianData)
+        header.append("data".data(using: .ascii)!)
+        header.append(UInt32(pcm.count).littleEndianData)
+        return header + pcm
+    }
+}
+
+private extension FixedWidthInteger {
+    var littleEndianData: Data { withUnsafeBytes(of: self.littleEndian) { Data($0) } }
+}
+
 enum PromptBuilder {
-    static func scenePrompt(globalStyle: String, phrase: String, translation: String) -> String {
-        // Phrase + meaning in-prompt so the model "knows" what to depict.
-        """
-        \(globalStyle)
-        French idiom or phrase: "\(phrase)" (used to mean: "\(translation)").
-        Create a memorable illustrative scene that makes this phrase easy to recall. \
-        Keep a single clear focal point; no text or captions; no watermarks.
-        """
+    /// Renders the image prompt template by replacing variables.
+    /// Supported tokens: {global_style}, {phrase}, {translation}
+    static func renderImagePrompt(template: String, globalStyle: String, phrase: String, translation: String) -> String {
+        var out = template
+        out = out.replacingOccurrences(of: "{global_style}", with: globalStyle)
+        out = out.replacingOccurrences(of: "{phrase}", with: phrase)
+        out = out.replacingOccurrences(of: "{translation}", with: translation)
+        return out
     }
 }

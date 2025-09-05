@@ -28,6 +28,7 @@ struct BuildView: View {
 
             Toggle("Include Images", isOn: $app.includeImages)
             Toggle("Include Audio", isOn: $app.includeAudio)
+            Toggle("Include Mnemonics", isOn: $app.includeMnemonics)
 
             HStack(spacing: 12) {
                 Button(app.isBuilding ? "Stop" : "Start Build") {
@@ -39,7 +40,7 @@ struct BuildView: View {
                     }
                 }
                 .keyboardShortcut(.return, modifiers: .command)
-                .disabled(app.cards.isEmpty || app.exportFolderURL == nil || (!app.includeImages && !app.includeAudio))
+                .disabled(app.cards.isEmpty || app.exportFolderURL == nil || (!app.includeImages && !app.includeAudio && !app.includeMnemonics))
 
                 if app.isBuilding {
                     ProgressView(value: Double(app.progress.completed),
@@ -104,6 +105,7 @@ struct BuildView: View {
         var totalTasks = 0
         if app.includeImages { totalTasks += app.cards.count }
         if app.includeAudio { totalTasks += app.cards.count }
+        if app.includeMnemonics { totalTasks += app.cards.count }
         app.progress = .init(total: totalTasks, completed: 0, failed: 0, currentStatus: "Starting…")
         log.removeAll()
 
@@ -117,12 +119,14 @@ struct BuildView: View {
             struct CardResult {
                 let cardId: UUID
                 let cardIndex: Int
-            let imageResult: Result<String, Error>?
-            let audioResult: Result<String, Error>?
+                let imageResult: Result<String, Error>?
+                let audioResult: Result<String, Error>?
+                let mnemonicResult: Result<String, Error>?
             }
 
             var imageNames: [UUID: String] = [:]
             var audioNames: [UUID: String] = [:]
+            var mnemonicNames: [UUID: String] = [:]
 
             let chunkSize = 25 // Process 25 cards concurrently
             let cardChunks = app.cards.chunked(into: chunkSize)
@@ -142,7 +146,10 @@ struct BuildView: View {
                             let imgName = "\(runId)_\(String(format: "%04d", card.index))_img.jpg"
                             imageTaskResult = await {
                                 do {
-                                    let prompt = PromptBuilder.scenePrompt(globalStyle: app.imageGlobalStyle, phrase: card.phrase, translation: card.translation)
+                                    let prompt = PromptBuilder.renderImagePrompt(template: app.imagePromptTemplate,
+                                                                                 globalStyle: app.imageGlobalStyle,
+                                                                                 phrase: card.phrase,
+                                                                                 translation: card.translation)
                                     let imgData = try await retry(times: 10, delay: 2.0) {
                                         try await client.generateImage(prompt: prompt, size: app.imageSize, quality: app.imageQuality, format: "jpeg")
                                     }
@@ -172,7 +179,30 @@ struct BuildView: View {
                             }()
                         }
 
-                            return CardResult(cardId: card.id, cardIndex: card.index, imageResult: imageTaskResult, audioResult: audioTaskResult)
+                        var mnemonicTaskResult: Result<String, Error>?
+                        if app.includeMnemonics {
+                            let mneName = "\(runId)_\(String(format: "%04d", card.index))_mnemonic.wav"
+                            mnemonicTaskResult = await {
+                                do {
+                                    let rt = RealtimeClient(cfg: .init(apiKey: apiKey, model: app.realtimeModel))
+                                    let pcm = try await retry(times: 5, delay: 2.0) {
+                                        try await rt.generateMnemonicAudio(
+                                            instructions: app.mnemonicInstructions,
+                                            targetWord: card.phrase,
+                                            voice: app.ttsVoice
+                                        )
+                                    }
+                                    let wav = AudioUtil.pcm16ToWav(pcm)
+                                    let fileURL = mediaDir.appendingPathComponent(mneName)
+                                    try wav.write(to: fileURL)
+                                    return .success(mneName)
+                                } catch {
+                                    return .failure(error)
+                                }
+                            }()
+                        }
+
+                            return CardResult(cardId: card.id, cardIndex: card.index, imageResult: imageTaskResult, audioResult: audioTaskResult, mnemonicResult: mnemonicTaskResult)
                         }
                     }
 
@@ -201,6 +231,17 @@ struct BuildView: View {
                         }
                         app.progress.completed += 1
                         }
+                    if let mnemonicResult = result.mnemonicResult {
+                        switch mnemonicResult {
+                        case .success(let filename):
+                            mnemonicNames[result.cardId] = filename
+                            log.append("✓ Mnemonic \(result.cardIndex): \(filename)")
+                        case .failure(let error):
+                            log.append("✗ Mnemonic \(result.cardIndex) failed: \(error.localizedDescription)")
+                            app.progress.failed += 1
+                        }
+                        app.progress.completed += 1
+                    }
                     }
                 }
             }
@@ -208,7 +249,7 @@ struct BuildView: View {
             // write TSV at the end
             if !Task.isCancelled {
                 do {
-                    let filename = try AnkiExporter.writeExport(cards: app.cards, imageNames: imageNames, audioNames: audioNames, to: folder, runId: runId)
+                    let filename = try AnkiExporter.writeExport(cards: app.cards, imageNames: imageNames, audioNames: audioNames, mnemonicNames: mnemonicNames, to: folder, runId: runId)
                     await MainActor.run { log.append("✓ Wrote \(filename)") }
                 } catch {
                     await MainActor.run { log.append("✗ Writing deck TSV failed: \(error.localizedDescription)") }

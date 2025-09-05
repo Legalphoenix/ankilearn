@@ -11,12 +11,20 @@ struct ImageSettingsView: View {
             Text("2) Image Settings")
                 .font(.title2.bold())
 
-            Text("Global style/system prompt (prepended to every card).")
+            Text("Global style/system prompt (used in template as {global_style}).")
                 .foregroundColor(.secondary)
 
             TextEditor(text: $app.imageGlobalStyle)
                 .font(.system(.body, design: .monospaced))
                 .frame(minHeight: 140)
+                .overlay(RoundedRectangle(cornerRadius: 8).stroke(Color.gray.opacity(0.2)))
+
+            Text("Image prompt template (supports {global_style}, {phrase}, {translation}).")
+                .foregroundColor(.secondary)
+
+            TextEditor(text: $app.imagePromptTemplate)
+                .font(.system(.body, design: .monospaced))
+                .frame(minHeight: 160)
                 .overlay(RoundedRectangle(cornerRadius: 8).stroke(Color.gray.opacity(0.2)))
 
             HStack {
@@ -56,9 +64,10 @@ struct ImageSettingsView: View {
         isLoading = true
         defer { isLoading = false }
         let card = app.cards[min(testIndex, app.cards.count-1)]
-        let prompt = PromptBuilder.scenePrompt(globalStyle: app.imageGlobalStyle,
-                                              phrase: card.phrase,
-                                              translation: card.translation)
+        let prompt = PromptBuilder.renderImagePrompt(template: app.imagePromptTemplate,
+                                                    globalStyle: app.imageGlobalStyle,
+                                                    phrase: card.phrase,
+                                                    translation: card.translation)
         do {
             guard let apiKey = Keychain.loadAPIKey() else { throw NSError(domain: "", code: -1, userInfo: [NSLocalizedDescriptionKey: "Set API key (⌘,) first."]) }
             let client = OpenAIClient(cfg: .init(apiKey: apiKey))

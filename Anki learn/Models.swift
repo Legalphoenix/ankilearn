@@ -38,6 +38,22 @@ final class AppState: ObservableObject {
     Playful, clean illustration, bright colors, single clear focal point, \
     slight exaggeration for memorability, no text or captions, no watermarks.
     """
+    {
+        didSet { UserDefaults.standard.set(imageGlobalStyle, forKey: imageGlobalStyleKey) }
+    }
+
+    // image prompt template (user-editable). Supports variables:
+    // {global_style}, {phrase}, {translation}
+    @Published var imagePromptTemplate: String =
+    """
+    {global_style}
+    Phrase: "{phrase}" (used to mean: "{translation}").
+    Create a memorable illustrative scene that makes this phrase easy to recall.
+    Keep a single clear focal point; no text or captions; no watermarks.
+    """
+    {
+        didSet { UserDefaults.standard.set(imagePromptTemplate, forKey: imagePromptTemplateKey) }
+    }
 
     // audio global style/system instruction (user-editable)
     @Published var audioGlobalStyle: String = """
@@ -64,7 +80,11 @@ final class AppState: ObservableObject {
     @Published var includeMnemonics: Bool = false
     @Published var mnemonicInstructions: String = """
     You are a mnemonic creating agent. Your only role is to respond by creating a mnemonic that the user can use to aid in their recall of the target word. The target word has been provided to you.
-    """
+    """ {
+        didSet {
+            UserDefaults.standard.set(mnemonicInstructions, forKey: mnemonicInstructionsKey)
+        }
+    }
     @Published var mnemonicPrompt: String = ""
     @Published var realtimeModel: String = "gpt-realtime"
 
@@ -89,6 +109,9 @@ final class AppState: ObservableObject {
     // var overrides: [UUID: String] = [:]
 
     private let savedListsKey = "savedLists"
+    private let imageGlobalStyleKey = "imageGlobalStyle"
+    private let imagePromptTemplateKey = "imagePromptTemplate"
+    private let mnemonicInstructionsKey = "mnemonicInstructions"
 
     func saveLists() {
         do {
@@ -105,6 +128,19 @@ final class AppState: ObservableObject {
             savedLists = try JSONDecoder().decode([SavedList].self, from: data)
         } catch {
             print("Error loading lists: \(error)")
+        }
+    }
+
+    init() {
+        // Load persisted mnemonic instructions if present
+        if let saved = UserDefaults.standard.string(forKey: mnemonicInstructionsKey), !saved.isEmpty {
+            self.mnemonicInstructions = saved
+        }
+        if let saved = UserDefaults.standard.string(forKey: imageGlobalStyleKey), !saved.isEmpty {
+            self.imageGlobalStyle = saved
+        }
+        if let saved = UserDefaults.standard.string(forKey: imagePromptTemplateKey), !saved.isEmpty {
+            self.imagePromptTemplate = saved
         }
     }
 }

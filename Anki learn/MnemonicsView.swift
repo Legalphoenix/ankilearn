@@ -15,7 +15,7 @@ struct MnemonicsView: View {
             Text("Mnemonics")
                 .font(.title2.bold())
 
-            Toggle("Include mnemonics in deck (used later during build)", isOn: $app.includeMnemonics)
+            // Include Mnemonics toggle moved to Build tab
 
             Group {
                 Text("Instructions for the LLM")
@@ -101,7 +101,7 @@ struct MnemonicsView: View {
                 }
             )
             // Realtime WS returns raw PCM16 @ 24kHz mono; wrap in WAV for AVAudioPlayer
-            let wav = pcm16ToWav(audio)
+            let wav = AudioUtil.pcm16ToWav(audio)
             lastAudioWav = wav
             player = try AVAudioPlayer(data: wav)
             player?.play()
@@ -128,30 +128,4 @@ struct MnemonicsView: View {
     }
 }
 
-// MARK: - PCM16 → WAV helper for playback
-private func pcm16ToWav(_ pcm: Data, sampleRate: UInt32 = 24_000, channels: UInt16 = 1) -> Data {
-    var header = Data()
-    let chunkSize: UInt32 = 36 + UInt32(pcm.count)
-    let byteRate: UInt32 = sampleRate * UInt32(channels) * 2 // 16-bit = 2 bytes
-    let blockAlign: UInt16 = channels * 2
-    let bitsPerSample: UInt16 = 16
-
-    header.append("RIFF".data(using: .ascii)!)
-    header.append(chunkSize.littleEndianData)
-    header.append("WAVE".data(using: .ascii)!)
-    header.append("fmt ".data(using: .ascii)!)
-    header.append(UInt32(16).littleEndianData)          // PCM fmt chunk size
-    header.append(UInt16(1).littleEndianData)           // Audio format = 1 (PCM)
-    header.append(channels.littleEndianData)
-    header.append(sampleRate.littleEndianData)
-    header.append(byteRate.littleEndianData)
-    header.append(blockAlign.littleEndianData)
-    header.append(bitsPerSample.littleEndianData)
-    header.append("data".data(using: .ascii)!)
-    header.append(UInt32(pcm.count).littleEndianData)
-    return header + pcm
-}
-
-private extension FixedWidthInteger {
-    var littleEndianData: Data { withUnsafeBytes(of: self.littleEndian) { Data($0) } }
-}
+// WAV wrapping moved to AudioUtil in Services.swift
